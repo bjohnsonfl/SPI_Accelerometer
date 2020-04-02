@@ -1,0 +1,6 @@
+# exclude everything except vhdl files
+/*
+
+!/*.vhd
+!/*.md
+!/.gitignore
