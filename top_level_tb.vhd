@@ -112,14 +112,9 @@ U_TOP_LEVEL : entity work.top_level
 --		wait until cs'event and cs = '0';   -- reg 3  read
 --			misoData <= "00001000";
 		
-		wait for 1 ms;
-		int1 <= '1';
-		wait until clk50MHz'event and clk50MHz = '1';
-		wait until cs'event and cs = '0';
-		wait until clk50MHz'event and clk50MHz = '1';
-		int1 <= '0';
 		
-		for i in 0 to 10000 loop
+		
+		for i in 0 to 50 loop
 			wait for 20 us;
 			int1 <= '1';
 			wait until cs'event and cs = '0';
@@ -135,6 +130,14 @@ U_TOP_LEVEL : entity work.top_level
 		wait until clk50MHz'event and clk50MHz = '1';
 		
 		rst <= '0';
+		
+		for i in 0 to 500 loop
+			wait for 20 us;
+			int1 <= '1';
+			wait until cs'event and cs = '0';
+			int1 <= '0';
+		end loop;
+		
 		
 		for i in 0 to 900000000 loop
 			wait until clk50MHz'event and clk50MHz = '1';

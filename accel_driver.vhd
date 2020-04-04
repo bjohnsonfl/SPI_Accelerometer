@@ -1,4 +1,6 @@
 --accel_driver
+-- TODO:
+-- 1) Incorporate data range generic for calibration LSB/g for z axis
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -33,7 +35,7 @@ architecture fsm_1p of accel_driver is
 	constant max	: natural := 50000000 /  500000 ;
 	signal count			:		integer range 0 to max;
 	signal countSignal		: std_logic;
-	type STATE_TYPE is (S_START, S_IDLE, S_CONFIG, S_WRITE, S_READ, S_READ_WAIT,S_OUTPUT); --S_CONFIG_TEST, S_WRITE_TEST);
+	type STATE_TYPE is (S_START, S_IDLE, S_CONFIG, S_WRITE, S_READ, S_READ_WAIT, S_CALIBRATE, S_OUTPUT); --S_CONFIG_TEST, S_WRITE_TEST);
 	signal STATE, NEXT_STATE			:		STATE_TYPE;
 	--signal accel_x, accel_y, accel_z	:		std_logic_vector(15 downto 0);
 	signal accel_data_buff : std_logic_vector( 47 downto 0);
@@ -45,6 +47,16 @@ architecture fsm_1p of accel_driver is
 	signal regAddr		: std_logic_vector (5 downto 0);
 	signal regData		: std_logic_vector (7 downto 0);
 	signal rxDataReadyLast : std_logic := '0';
+	
+	constant sampleBits : natural := 4;
+	constant samples  : natural := 2 ** sampleBits;
+	--signal div_padding : std_logic_vector (sampleBits - 1 downto 0);
+	signal sample_count : integer range 0 to samples + 1;
+	signal calibrate : std_logic;
+	--type NIBBLE is array (3 downto 0) of std_ulogic;
+	type calibration_array is array (2 downto 0) of std_logic_vector (15 downto 0);  -- (0) X accumulate, (1) Y accumulate, (2) Z accumulate
+	signal calibData : calibration_array;
+	
 begin
 
 
@@ -67,6 +79,12 @@ begin
 			regTest <= 0;
 			byteCount <= 0;
 			stateID <= "000";
+			calibrate <= '0';
+			calibData(0) <= (others => '0');
+			calibData(1) <= (others => '0');
+			calibData(2) <= (others => '0');
+			sample_count <= 0;
+			--div_padding <= (others => '0');
 			
 		elsif(clk'event and clk = '1') then
 			
@@ -114,8 +132,56 @@ begin
 			
 				when S_READ_WAIT =>
 					stateID <= "111";
-					if(int1 = '1' or intBypass = '1') then state <= S_READ;
+					if (calibrate = '1') then state <= S_CALIBRATE;
+					elsif(int1 = '1' or intBypass = '1') then state <= S_READ;
 					end if;
+					
+				when S_CALIBRATE => 
+					case reg is								-- reg should be 0 from config state earlier, represents each offset register
+						when 0 =>							-- calculate the negative of x and y offset. subtract 256 (1g) from z and shift 2 (8 bit conversion)
+							if(calibData(0)(15) = '0') then  -- x axis negative conversion
+								calibData(0) <= std_logic_vector(signed(not calibData(0)) + 1);	-- twos comp conversion from positive to negative
+							else
+								calibData(0) <= std_logic_vector(not(signed(calibData(0)) - 1));  -- twos comp conversion from negative to positive
+							end if;
+							
+							if(calibData(1)(15) = '0') then -- y axis negative conversion
+								calibData(1) <= std_logic_vector(signed(not calibData(1)) + 1);	-- twos comp conversion from positive to negative
+							else
+								calibData(1) <= std_logic_vector(not(signed(calibData(1)) - 1));  -- twos comp conversion from negative to positive
+							end if;
+							
+							calibData(2) <=std_logic_vector(shift_right(signed(calibData(2)) - 256, 2));	-- find error realtive to gravity in z axis and divide by 4 for 10 to 8 bit conversion			
+							reg <= reg + 1;
+						
+						when 1 =>																					-- calculate Z's negative, store x axis
+						
+							if(calibData(2)(15) = '0') then 													-- Z axis negative conversion
+								calibData(2) <= std_logic_vector(signed(not calibData(2)) + 1);	-- twos comp conversion from positive to negative
+							else
+								calibData(2) <= std_logic_vector(not(signed(calibData(2)) - 1));  -- twos comp conversion from negative to positive
+							end if;
+							
+							regAddr <= "011110";																	-- Register 0x1E: "X offset" 8 bit 2's comp offset for X axis
+							regData <= calibData(0)(7 downto 0);															-- X offset data
+							reg <= reg + 1;	
+							state  <= S_WRITE;
+						when 2 =>
+							regAddr <= "011111";																	-- Register 0x1F: "Y offset" 8 bit 2's comp offset for Y axis
+							regData <= calibData(1)(7 downto 0);
+							reg <= reg + 1;
+							state  <= S_WRITE;
+						when 3 =>
+							regAddr <= "100000";																	-- Register 0x20: "Z offset" 8 bit 2's comp offset for Z axis
+							regData <= calibData(2)(7 downto 0);
+							reg <= 0;
+							state  <= S_WRITE;
+							calibrate <= '0';																		-- de-assert calibration flag to continue reading normally
+						when others => null;
+						
+					end case;
+					
+					
 --				when S_CONFIG_TEST =>
 --						stateID <= "111";
 --					case regTest is
@@ -280,7 +346,7 @@ begin
 								state <= S_OUTPUT;
 							else
 								byteCount <= byteCount + 1;
-								accel_data_buff(((byteCount-1) * 8)  - 1 downto (byteCount-2) * 8) <=  rxData;--std_logic_vector(to_unsigned(byteCount, bytes'length)); -- rxData;
+								accel_data_buff(((byteCount-1) * 8)  - 1 downto (byteCount-2) * 8) <=  rxData;-- std_logic_vector(to_unsigned(byteCount, bytes'length)); -- rxData;
 							end if;
 
 
@@ -290,9 +356,25 @@ begin
 					end if;
 				when S_OUTPUT =>
 					stateID <= "110";
-					--mode <= '1';
+					
+					if(sample_count <= samples) then				-- enter for first n samples for calibration
+						if(sample_count = samples) then			-- compare sample count to threshold 
+							calibrate <= '1';							-- set flag to calibrate with new values
+							calibData(0) <= std_logic_vector(shift_right(signed(calibData(0)), 2 + sampleBits)); -- divide by number of samples for average, and convert to 64 LSB/1g (shifting a 10 bit value right arithmetically for an 8 bit value)
+							calibData(1) <= std_logic_vector(shift_right(signed(calibData(1)), 2 + sampleBits));
+							calibData(2) <= std_logic_vector(shift_right(signed(calibData(2)), sampleBits)); -- get average. Next clock cycle will compare to 1g (2^8), and then convert to 64 LSB/1g
+						else 												-- summation of samples
+							calibData(0) <= std_logic_vector(signed(calibData(0)) + signed(accel_data_buff(15 downto   0))); -- summation of X data	
+							calibData(1) <= std_logic_vector(signed(calibData(1)) + signed(accel_data_buff(31 downto  16))); -- summation of Y data	
+							calibData(2) <= std_logic_vector(signed(calibData(2)) + signed(accel_data_buff(47 downto  32))); -- summation of Z data								
+						end if;
+						sample_count <= sample_count + 1;	-- increment count, if n samples have been collected, one more prevents entering this if statement
 					accel_data <= accel_data_buff;
-					state <= S_IDLE;
+					else
+						accel_data <= accel_data_buff;			-- clock collected accelerometer data for ouput
+					end if;
+						state <= S_IDLE;								-- go back to idle to repeat the cycle
+					
 				when others => 
 					stateID <= "111";
 						NULL;
