@@ -42,7 +42,7 @@ architecture fsm_1p of accel_driver is
 	signal byteCount	: integer range -1 to 16 := 0;
 	constant byteCountRead : integer := 7;
 	signal mode			: std_logic;
-	signal reg	: integer range 0 to 3;
+	signal reg	: integer range 0 to 8;
 	signal regTest : integer range 0 to 16;
 	signal regAddr		: std_logic_vector (5 downto 0);
 	signal regData		: std_logic_vector (7 downto 0);
@@ -275,14 +275,31 @@ begin
 							regData <= "00000100";
 							reg <= reg + 1;
 							state <= S_WRITE;
-						when 2 => 
+						when 2 =>
+							regAddr <= "011110";					-- Register 0x1E: "X offset" 8 bit 2's comp offset for X axis
+							regData <= "00000000";				-- Clear X offset register so calibration will not use data from previous resets
+							reg <= reg + 1;
+							state  <= S_WRITE;
+							
+						when 3 =>
+							regAddr <= "011111";					-- Register 0x1F: "Y offset" 8 bit 2's comp offset for Y axis
+							regData <= "00000000";				-- Clear Y offset register so calibration will not use data from previous resets
+							reg <= reg + 1;
+							state  <= S_WRITE;
+						
+						when 4 =>
+							regAddr <= "100000";					-- Register 0x20: "Z offset" 8 bit 2's comp offset for Z axis
+							regData <= "00000000";				-- Clear Z offset register so calibration will not use data from previous resets
+							reg <= reg + 1;
+							state  <= S_WRITE;
+						
+						when 5 => 
 							regAddr <= "101101";	 -- Register 0x2D: "Power_CTL" sets measure bit (0b1000) to start sampling. 
 							regData <= "00001000";
-							--reg <= 0;
 							reg <= reg + 1;
 							state <= S_WRITE;
 							--mode <= '1';			-- Switch to Read mode so IDLE turns to S_READ and not S_CONFIG
-						when 3 => 
+						when 6 => 
 							regAddr <= "101110";	 -- Register 0x2E: "INT_ENABLE" enables Data_Ready interrupt (0b10000000) 
 							regData <= "10000000";
 							reg <= 0;
