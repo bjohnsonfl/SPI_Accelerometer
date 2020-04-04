@@ -15,8 +15,17 @@ entity top_level is
 		sclk_test: out std_logic;
 		cs_test 	: out std_logic;
 		miso_test : out std_logic;
+		int1_test : out std_logic;
+		
+		s1_test  : out std_logic;
+		s2_test  : out std_logic;
+		s3_test  : out std_logic;
+		mode_test : out std_logic;
+		
+		
 	
---		int1 		: in std_logic;
+		int1 		: in std_logic;
+		intBypass : in std_logic;
 --		int2 		: in std_logic;
 --		
 --		pol		: in std_logic;
@@ -28,6 +37,14 @@ entity top_level is
       led0_dp  : out std_logic;
 		led1     : out std_logic_vector(6 downto 0);
       led1_dp  : out std_logic;
+		led2     : out std_logic_vector(6 downto 0);
+      led2_dp  : out std_logic;
+		led3     : out std_logic_vector(6 downto 0);
+      led3_dp  : out std_logic;
+		led4     : out std_logic_vector(6 downto 0);
+      led4_dp  : out std_logic;
+		led5     : out std_logic_vector(6 downto 0);
+      led5_dp  : out std_logic;
 		
 		rst_led  : out std_logic
 	
@@ -53,11 +70,11 @@ architecture STR of top_level is
 	signal sclk_buffer	:	std_logic;
 	signal mosi_buffer	:	std_logic;
 	signal cs_buffer	:	std_logic;
-	signal miso_buffer : std_logic;
+--	signal miso_buffer : std_logic;
+	signal int1_buffer : std_logic;
+	signal stateID : std_logic_vector(2 downto 0);
+	
 
---	type state_type is (S_1, S_2, S_3);
---	signal state : state_type;
---	signal count : integer range 0 to 100000000;
 begin
 
 	------------------------------------
@@ -83,6 +100,7 @@ begin
 		rxDataReady	=> rxDataReady
 	);
 	
+	int1_test <= int1_buffer;
 	miso_test <= miso;
 	mosi <= mosi_buffer;
 	cs <= cs_buffer;
@@ -91,12 +109,21 @@ begin
 	sclk_test <= sclk_buffer;
 	cs_test 	 <= cs_buffer;
 	
+	s1_test <= stateID(0);
+	s2_test <= stateID(1);
+	s3_test <= stateID(2);
+	led0_dp <= stateID(0);
+	led1_dp <= stateID(1);
+	led2_dp <= stateID(2);
+	--mode_test <= m;
+	
 	rst_led <= not rst;
 	
 	U_ACCEL_DRIVER : entity work.accel_driver(FSM_1P)
 		port map(
 			rst			=> rst,
 			clk			=> clk50MHz,
+			int1			=> int1_buffer,
 			rxDataReady	=> rxDataReady,
 			go				=> go,
 			pol			=> pol,
@@ -105,8 +132,10 @@ begin
 			txData 		=> txData,
 			rxData		=> rxData,
 			accel_data	=> accel_data,
-			s1 => led0_dp,
-			s2 => led1_dp
+			stateID => stateID,
+			m => mode_test,
+			c => led4_dp,
+			intBypass => intBypass
 		);
 	
 
@@ -123,19 +152,45 @@ begin
 	------------------------------------
 	U_LED0	:	entity work.decoder7seg
 		port map(
-			input => accel_data(19 downto 16),
-			--input => accel_data(27 downto 24),
+			input => accel_data(3 downto 0),
 			output =>led0
 		);
 	--led0_dp <= '0';
 
 	U_LED1	:	entity work.decoder7seg
 		port map(
-			--input => accel_data(31 downto 28),
-			input => accel_data(23 downto 20),
+			input => accel_data(7 downto 4),
 			output =>led1
 		);
 	--led1_dp <= '0';
+	
+	U_LED2	:	entity work.decoder7seg
+		port map(
+			input => accel_data(11 downto 8),
+			output =>led2
+		);
+--	led2_dp <= '0';
+
+	U_LED3	:	entity work.decoder7seg
+		port map(
+			input => accel_data(15 downto 12),
+			output =>led3
+		);
+--	led3_dp <= '0';
+	
+	U_LED4	:	entity work.decoder7seg
+		port map(
+			input => accel_data(19 downto 16),
+			output =>led4
+		);
+--	led4_dp <= '0';
+
+	U_LED5	:	entity work.decoder7seg
+		port map(
+			input => accel_data(23 downto 20),
+			output =>led5
+		);
+	led5_dp <= not int1;
 
 
 	
@@ -144,47 +199,16 @@ begin
 	
 		if(rst = '1') then
 			sclk_buffer <= '1';
+			int1_buffer <= '0';
 		elsif(clk50MHz'event and clk50MHz = '1') then
 			sclk_buffer <= sclk_out;
+			int1_buffer <= int1;
 		end if;
 	end process;
 	
 	
 	
---	process(clk50MHz, rst)
---	begin
---	
---		if(rst = '1') then
---			count <= 0;
---			state <= S_1;
---		elsif(clk50MHz'event and clk50MHz = '1') then
---			
---			case state is
---				when S_1 =>
---					if(count = 10000000) then 
---						state <= S_2;
---						count <= 0;
---					else count <= count + 1;
---					end if;
---				when S_2 =>
---				if(count = 10000000) then 
---						state <= s_3;
---					
---						count <= 0;
---					else 
---						count <= count + 1;
---						led1_dp <= '0';
---					end if;
---					
---				when S_3 =>
---					state <= S_1;
---					led1_dp <= '1';
---					
---			end case;
---			
---		end if;
---	
---	end process;
+
 	
 	
 end STR;

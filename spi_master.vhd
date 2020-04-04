@@ -271,7 +271,7 @@ begin
 	U_CLOCK_DIV : entity work.clock_div
 		generic map(
 			clk_in_freq => 50000000,
-			clk_out_freq => 500000)
+			clk_out_freq => 5)
 		port map(
 			clk_in => clk,
 			clk_out => sclk,
