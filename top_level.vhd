@@ -166,33 +166,36 @@ begin
 	
 	U_LED2	:	entity work.decoder7seg
 		port map(
-			input => accel_data(11 downto 8),
+			input => accel_data(19 downto 16),
 			output =>led2
 		);
 --	led2_dp <= '0';
 
 	U_LED3	:	entity work.decoder7seg
 		port map(
-			input => accel_data(15 downto 12),
+			input => accel_data(23 downto 20),
 			output =>led3
 		);
 --	led3_dp <= '0';
 	
 	U_LED4	:	entity work.decoder7seg
 		port map(
-			input => accel_data(19 downto 16),
+			input => accel_data(35 downto 32),
 			output =>led4
 		);
 --	led4_dp <= '0';
 
 	U_LED5	:	entity work.decoder7seg
 		port map(
-			input => accel_data(23 downto 20),
+			input => accel_data(39 downto 36),
 			output =>led5
 		);
 	led5_dp <= not int1;
 
 
+	
+	
+	
 	
 	process(clk50MHz, rst)
 	begin
